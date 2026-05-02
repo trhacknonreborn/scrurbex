@@ -152,8 +152,8 @@ def main():
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        region = st.text_input("📍 Région / Ville", "Ardennes")
-        keywords = st.text_input("🏚️ Type de lieu / mots-clés", "usine sidérurgique")
+        region = st.text_input("📍 Région / Ville", "Doubs")
+        keywords = st.text_input("🏚️ Type de lieu / mots-clés", "sanatorium")
     with col2:
         use_ai = st.checkbox("Activer Analyse IA", value=True)
 
