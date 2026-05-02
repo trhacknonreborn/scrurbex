@@ -1,0 +1,8 @@
+streamlit
+requests
+openai
+beautifulsoup4
+lxml
+pandas
+folium
+geopy
