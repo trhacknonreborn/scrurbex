@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup
 st.set_page_config(page_title="URBEX OSINT by TRHACKNON", layout="wide", page_icon="☣️")
 
 # ================== CLÉ OPENAI PAR DÉFAUT ==================
-DEFAULT_API_KEY = "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"
+DEFAULT_API_KEY = "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"
 
 if "openai_client" not in st.session_state:
     try:
