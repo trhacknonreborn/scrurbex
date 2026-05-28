@@ -6,3 +6,4 @@ lxml
 pandas
 folium
 geopy
+python-dotenv
