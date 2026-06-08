@@ -214,7 +214,7 @@ def main():
         region = st.text_input("📍 Région / Ville", "Belfort")
         keywords = st.text_input("🏚️ Type de spot / Mots-clés", "usine abandonnée")
     with col2:
-        if st.button("🚀 LANCER RECHERCHE COMPLÈTE", type="primary", use_container_width=True):
+        if st.button("🚀 LANCER RECHERCHE COMPLÈTE", type="primary", width='stretch'):
             client = st.session_state.openai_client
             if use_ai and not client:
                 st.error("Ajoute ta clé OpenAI dans la sidebar.")
@@ -226,7 +226,7 @@ def main():
             st.success(f"✅ {len(all_results)} résultats collectés")
 
             with st.expander("📋 Résultats bruts"):
-                st.dataframe(pd.DataFrame(all_results).head(50), use_container_width=True)
+                st.dataframe(pd.DataFrame(all_results).head(50), width='stretch')
 
             if use_ai and client:
                 with st.spinner("Analyse GPT-5.5 en cours..."):
