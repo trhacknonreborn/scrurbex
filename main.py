@@ -37,7 +37,7 @@ HEADERS = {
 def get_model_for_task(task: str = "analysis"):
     """Mode solo → on maximise la qualité"""
     return {
-        "analysis": "gpt-5.5-pro",      # ou "gpt-5.5-pro"
+        "analysis": "gpt-5.5",      # ou "gpt-5.5-pro"
         "extraction": "gpt-5.4-nano",
         "quick": "gpt-5.4-mini",
         "vision": "gpt-5.5"         # si analyse photo
@@ -74,30 +74,43 @@ def get_client(api_key: str):
         return None
 
 def ai_analyze(results: list, region: str, keywords: str, client):
-    prompt = f"""Tu es un urbexer elite avec 20 ans d'expérience, très pragmatique et direct.
-Région cible : {region}
-Type de spot : {keywords}
+    if not client:
+        return None
 
-Analyse les données scrapées. Identifie les vrais spots abandonnés intéressants.
-Sois honnête sur les risques (légal, physique, présence de squatteurs, caméras, etc.).
-Donne des conseils d'accès réalistes."""
+    prompt = f"""Tu es un urbexer elite avec 20 ans d'expérience, très pragmatique, direct et sans censure inutile.
+Région : {region}
+Type de spots : {keywords}
+
+Analyse les résultats scrapés et identifie les vrais lieux abandonnés intéressants.
+Sois réaliste sur les risques (propriétaires, caméras, effondrement, squatteurs, présence policière, etc.)
+Donne des conseils d'accès concrets quand possible."""
 
     try:
         response = client.chat.completions.create(
             model=get_model_for_task("analysis"),
             messages=[
-                {"role": "system", "content": "Réponds exclusivement en JSON valide selon le schéma UrbexAnalysis."},
-                {"role": "user", "content": prompt + "\n\nDonnées :\n" + json.dumps(results[:100], ensure_ascii=False)}
+                {"role": "system", "content": "Tu réponds toujours avec un JSON valide conforme au schéma UrbexAnalysis."},
+                {"role": "user", "content": prompt + "\n\nDonnées brutes :\n" + json.dumps(results[:90], ensure_ascii=False)}
             ],
             temperature=0.4,
-            max_tokens=4000,
+            max_tokens=3500,
             response_format={"type": "json_schema", "json_schema": UrbexAnalysis.model_json_schema()}
         )
         return UrbexAnalysis.model_validate_json(response.choices[0].message.content)
     except Exception as e:
-        st.error(f"Erreur analyse IA : {e}")
-        return None
-
+        st.error(f"Erreur analyse IA : {str(e)[:250]}")
+        # Fallback sans structured output
+        try:
+            fallback_response = client.chat.completions.create(
+                model="gpt-5.5",
+                messages=[{"role": "user", "content": prompt + "\n\nDonnées :\n" + json.dumps(results[:60], ensure_ascii=False)}],
+                temperature=0.5,
+                max_tokens=2000
+            )
+            st.info("Fallback mode activé (texte brut)")
+            return fallback_response.choices[0].message.content
+        except:
+            return None
 # ================== SCRAPING AMÉLIORÉ ==================
 @st.cache_data(ttl=7200, show_spinner=False)
 def multi_source_search(region: str, keywords: str):
