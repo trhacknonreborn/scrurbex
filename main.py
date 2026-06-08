@@ -93,7 +93,7 @@ Donne des conseils d'accès concrets quand possible."""
                 {"role": "user", "content": prompt + "\n\nDonnées brutes :\n" + json.dumps(results[:90], ensure_ascii=False)}
             ],
             temperature=0.4,
-            max_tokens=3500,
+            max_completion_tokens=3500,
             response_format={"type": "json_schema", "json_schema": UrbexAnalysis.model_json_schema()}
         )
         return UrbexAnalysis.model_validate_json(response.choices[0].message.content)
@@ -105,7 +105,7 @@ Donne des conseils d'accès concrets quand possible."""
                 model="gpt-5.5",
                 messages=[{"role": "user", "content": prompt + "\n\nDonnées :\n" + json.dumps(results[:60], ensure_ascii=False)}],
                 temperature=0.5,
-                max_tokens=2000
+                max_completion_tokens=2000
             )
             st.info("Fallback mode activé (texte brut)")
             return fallback_response.choices[0].message.content
