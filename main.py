@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-URBEX OSINT MAX v10.3 — Version Finale Stable
+URBEX OSINT MAX v10.4 — Version Stable Finale
 """
 
 import streamlit as st
@@ -15,10 +15,10 @@ from openai import OpenAI
 from bs4 import BeautifulSoup
 import pandas as pd
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 st.set_page_config(
-    page_title="URBEX OSINT MAX v10.3",
+    page_title="URBEX OSINT MAX v10.4",
     layout="wide",
     page_icon="☣️",
     initial_sidebar_state="expanded"
@@ -39,16 +39,11 @@ HEADERS = {
 
 # ================== MODÈLES ==================
 def get_model_for_task(task: str = "analysis"):
-    return {
-        "analysis": "gpt-5.5",
-        "extraction": "gpt-5.4-nano",
-        "quick": "gpt-5.4-mini",
-    }.get(task, "gpt-5.5")
+    return "gpt-5.5"  # Modèle principal recommandé
 
-# ================== SCHÉMAS PYDANTIC (corrigé) ==================
+# ================== SCHÉMAS ==================
 class UrbexSpot(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    
     nom: str
     localisation: str
     coordonnees: Optional[str] = None
@@ -62,12 +57,31 @@ class UrbexSpot(BaseModel):
 
 class UrbexAnalysis(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    
     lieux: List[UrbexSpot]
     synthese: str
     conseils_securite: str
     spots_prioritaires: List[str] = Field(default_factory=list)
     zones_a_eviter: List[str] = Field(default_factory=list)
+
+# Fonction pour corriger le schéma OpenAI
+def prepare_schema_for_openai(model_class):
+    schema = model_class.model_json_schema()
+    # Force additionalProperties: false partout
+    def add_additional_properties_false(obj: Dict[str, Any]):
+        if isinstance(obj, dict):
+            if obj.get("type") == "object":
+                obj["additionalProperties"] = False
+            for value in obj.values():
+                if isinstance(value, dict):
+                    add_additional_properties_false(value)
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            add_additional_properties_false(item)
+        return obj
+    
+    schema = add_additional_properties_false(schema)
+    return schema
 
 # ================== CLIENT ==================
 def get_client(api_key: str):
@@ -84,20 +98,20 @@ def ai_analyze(results: list, region: str, keywords: str, client):
     if not client:
         return None
 
-    prompt = f"""Tu es un urbexer réaliste et expérimenté.
+    prompt = f"""Tu es un urbexer expérimenté et réaliste.
 Région : {region}
 Recherche : {keywords}
 
-Analyse les résultats et retourne uniquement les vrais spots intéressants."""
+Analyse les résultats et identifie les meilleurs spots concrets."""
 
     try:
-        schema = UrbexAnalysis.model_json_schema()
+        schema = prepare_schema_for_openai(UrbexAnalysis)
 
         response = client.chat.completions.create(
-            model=get_model_for_task("analysis"),
+            model=get_model_for_task(),
             messages=[
-                {"role": "system", "content": "Réponds uniquement avec un JSON valide selon le schéma UrbexAnalysis."},
-                {"role": "user", "content": prompt + "\n\nDonnées :\n" + json.dumps(results[:100], ensure_ascii=False)}
+                {"role": "system", "content": "Réponds uniquement avec un JSON valide selon le schéma fourni."},
+                {"role": "user", "content": prompt + "\n\nDonnées brutes :\n" + json.dumps(results[:120], ensure_ascii=False)}
             ],
             max_completion_tokens=3500,
             response_format={
@@ -112,16 +126,15 @@ Analyse les résultats et retourne uniquement les vrais spots intéressants."""
         return UrbexAnalysis.model_validate_json(response.choices[0].message.content)
 
     except Exception as e:
-        st.error(f"Erreur analyse IA : {str(e)[:280]}")
-        
+        st.error(f"Erreur analyse IA : {str(e)[:300]}")
         # Fallback
         try:
             st.info("🔄 Fallback activé")
             fallback = client.chat.completions.create(
-                model=get_model_for_task("analysis"),
+                model=get_model_for_task(),
                 messages=[
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": "Analyse ces résultats urbex et structure clairement ta réponse :\n" + json.dumps(results[:70], ensure_ascii=False)}
+                    {"role": "user", "content": "Analyse ces résultats et structure ta réponse clairement :\n" + json.dumps(results[:80], ensure_ascii=False)}
                 ],
                 max_completion_tokens=2800
             )
@@ -130,15 +143,15 @@ Analyse les résultats et retourne uniquement les vrais spots intéressants."""
             st.error(f"Fallback échoué : {fb}")
             return None
 
-# ================== SCRAPING ==================
+# ================== SCRAPING (renforcé) ==================
 @st.cache_data(ttl=7200, show_spinner=False)
 def multi_source_search(region: str, keywords: str):
     query = f"{region} {keywords}"
     results = []
 
     sources = [
-        (f"https://www.google.com/search?q={quote(query + ' urbex abandonné OR friche OR usine abandonnée')}", "Google"),
-        (f"https://www.reddit.com/search.json?q={quote(query + ' urbex OR abandonné OR friche')}&limit=25", "Reddit"),
+        (f"https://www.google.com/search?q={quote(query + ' urbex OR friche OR usine abandonnée OR bâtiment désaffecté')}", "Google"),
+        (f"https://www.reddit.com/search.json?q={quote(query + ' urbex OR abandonné OR friche')}&limit=30", "Reddit"),
         (f"https://www.urbexpassion.com/recherche?query={quote(query)}", "UrbexPassion"),
         (f"https://www.28dayslater.co.uk/search/?q={quote(query)}", "28dayslater"),
     ]
@@ -149,11 +162,11 @@ def multi_source_search(region: str, keywords: str):
             results.extend(future.result() or [])
 
     # Deep crawl
-    for item in results[:15]:
+    for item in results[:18]:
         if item.get("url"):
             results.extend(deep_crawl(item["url"]))
 
-    return results[:200]
+    return results[:220]
 
 def scrape_source(url: str, source_name: str):
     results = []
@@ -162,19 +175,19 @@ def scrape_source(url: str, source_name: str):
         r.raise_for_status()
         
         if source_name == "Reddit":
-            for post in r.json().get("data", {}).get("children", [])[:20]:
+            for post in r.json().get("data", {}).get("children", [])[:25]:
                 d = post["data"]
                 results.append({
                     "source": source_name,
-                    "title": d.get("title", "")[:180],
+                    "title": d.get("title", "")[:200],
                     "url": f"https://reddit.com{d.get('permalink', '')}"
                 })
         else:
             soup = BeautifulSoup(r.text, 'lxml')
-            for a in soup.find_all('a', href=True)[:45]:
+            for a in soup.find_all('a', href=True)[:50]:
                 href = a['href']
-                title = a.get_text(strip=True)[:180]
-                if href and title and any(k in (href + title).lower() for k in ['urbex', 'abandon', 'friche', 'report', 'thread', 'lieu']):
+                title = a.get_text(strip=True)[:200]
+                if href and title and len(title) > 5:
                     full_url = href if href.startswith('http') else f"https://www.urbexpassion.com{href}" if "urbexpassion" in url else url + href
                     results.append({"source": source_name, "title": title, "url": full_url})
     except:
@@ -188,18 +201,18 @@ def deep_crawl(url: str):
         links = []
         for a in soup.find_all('a', href=True):
             href = a['href']
-            if href.startswith('http') and any(k in href.lower() for k in ['urbex', 'report', 'thread', 'abandon', 'friche']):
-                links.append({"source": "Deep Crawl", "title": a.get_text(strip=True)[:140] or "Lien", "url": href})
+            if href.startswith('http') and any(k in href.lower() for k in ['urbex', 'report', 'thread', 'abandon', 'friche', 'lieu']):
+                links.append({"source": "Deep Crawl", "title": a.get_text(strip=True)[:150] or "Lien", "url": href})
                 if len(links) >= 12:
                     break
         return links
     except:
         return []
 
-# ================== UI ==================
+# ================== MAIN ==================
 def main():
-    st.title("🌆 URBEX OSINT MAX v10.3")
-    st.caption("**Stable • GPT-5.5 • Scraping renforcé**")
+    st.title("🌆 URBEX OSINT MAX v10.4")
+    st.caption("**Stable • GPT-5.5 • Schema corrigé**")
 
     with st.sidebar:
         st.header("🔑 Configuration")
@@ -215,24 +228,24 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col1:
         region = st.text_input("📍 Région / Ville", "Belfort")
-        keywords = st.text_input("🏚️ Type de spot / Mots-clés", "usine abandonnée")
+        keywords = st.text_input("🏚️ Type de spot / Mots-clés", "usine abandonnée friche")
     with col2:
         if st.button("🚀 LANCER RECHERCHE COMPLÈTE", type="primary", width='stretch'):
             client = st.session_state.openai_client
             if use_ai and not client:
-                st.error("Ajoute ta clé OpenAI.")
+                st.error("Ajoute ta clé OpenAI dans la sidebar.")
                 st.stop()
 
-            with st.spinner("Scraping multi-sources..."):
+            with st.spinner("Scraping multi-sources en cours..."):
                 all_results = multi_source_search(region, keywords)
 
             st.success(f"✅ {len(all_results)} résultats collectés")
 
             with st.expander("📋 Résultats bruts"):
-                st.dataframe(pd.DataFrame(all_results).head(60), width='stretch')
+                st.dataframe(pd.DataFrame(all_results).head(70), width='stretch')
 
             if use_ai and client:
-                with st.spinner("Analyse GPT-5.5..."):
+                with st.spinner("Analyse GPT-5.5 en cours..."):
                     analysis = ai_analyze(all_results, region, keywords, client)
 
                 if analysis:
@@ -247,7 +260,7 @@ def main():
                                 st.markdown(f"**Intérêt** : {spot.interet}")
                                 st.markdown(f"**Risques** : {', '.join(spot.risques)}")
                                 if spot.conseils_acces:
-                                    st.markdown(f"**Conseils** : {spot.conseils_acces}")
+                                    st.markdown(f"**Conseils accès** : {spot.conseils_acces}")
                                 if spot.lien:
                                     st.markdown(f"[🔗 Lien]({spot.lien})")
                             spots_data.append(spot.model_dump())
@@ -260,13 +273,13 @@ def main():
                             with c2:
                                 st.download_button("📥 JSON", json.dumps(spots_data, indent=2, ensure_ascii=False), f"urbex_{region}.json")
                     else:
-                        st.subheader("Analyse")
+                        st.subheader("Analyse (texte)")
                         st.markdown(str(analysis))
 
             st.session_state.history.append({"date": datetime.now().strftime("%Y-%m-%d %H:%M"), "region": region, "keywords": keywords})
 
     if st.session_state.history:
-        with st.expander("Historique des recherches"):
+        with st.expander("Historique"):
             st.dataframe(pd.DataFrame(st.session_state.history))
 
 if __name__ == "__main__":
