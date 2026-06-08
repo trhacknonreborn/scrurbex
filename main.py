@@ -197,7 +197,7 @@ def main():
     with col2:
         max_spots = st.slider("Nombre de spots à afficher", 5, 20, 12)
 
-    if st.button("🚀 LANCER RECHERCHE COMPLÈTE", type="primary", use_container_width=True):
+    if st.button("🚀 LANCER RECHERCHE COMPLÈTE", type="primary", width='stretch'):
         client = st.session_state.openai_client
         if use_ai and not client:
             st.error("Veuillez configurer votre clé OpenAI")
@@ -211,7 +211,7 @@ def main():
         # Affichage brut
         with st.expander("📋 Données brutes"):
             df_raw = pd.DataFrame(all_results)
-            st.dataframe(df_raw.head(50), use_container_width=True)
+            st.dataframe(df_raw.head(50), width='stretch')
 
         # Analyse IA
         analysis = None
